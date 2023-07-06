@@ -10,33 +10,6 @@ from api_users.serializers import CustomUserSerializer
 from recipes.models import Ingredients, IngredientsRecipes, Recipes, Tags
 
 
-class IngredientSerializer(serializers.ModelSerializer):
-    """Сериализатор для ингредиентов."""
-
-    class Meta:
-        fields = ['name', 'measurement_unit']
-        model = Ingredients
-
-
-class IngredientsRecipesSerializer(serializers.ModelSerializer):
-    """Сериализатор для ингредиентов в рецепте."""
-    id = serializers.ReadOnlyField(source='ingredient.id')
-    name = serializers.ReadOnlyField(source='ingredient.name')
-    measurement_unit = serializers.ReadOnlyField(
-        source='ingredient.measurement_unit'
-    )
-
-    class Meta:
-        model = IngredientsRecipes
-        fields = ['id', 'name', 'measurement_unit', 'amount']
-        validators = [
-            UniqueTogetherValidator(
-                queryset=IngredientsRecipes.objects.all(),
-                fields=['ingredient', 'recipe']
-            )
-        ]
-
-
 class Hex2NameColor(serializers.Field):
     def to_representation(self, value):
         return value
@@ -66,14 +39,37 @@ class Base64ImageField(serializers.ImageField):
         return super().to_internal_value(data)
 
 
-class ShowRecipeSerializer(serializers.ModelSerializer):
-    """Сериализатор для отображения рецептов."""
-    image = Base64ImageField()
+class IngredientSerializer(serializers.ModelSerializer):
+    """Сериализатор для ингредиентов."""
+    class Meta:
+        fields = ['name', 'measurement_unit']
+        model = Ingredients
+
+
+class IngredientsRecipesSerializer(serializers.ModelSerializer):
+    """Сериализатор для ингредиентов в рецепте."""
+    id = serializers.SerializerMethodField()
+    name = serializers.SerializerMethodField()
+    measurement_unit = serializers.SerializerMethodField()
 
     class Meta:
-        model = Recipes
-        fields = ['name', 'cooking_time', 'id', 'image']
-        read_only_fields = ['name', 'cooking_time', 'id', 'image']
+        model = IngredientsRecipes
+        fields = ['id', 'name', 'measurement_unit', 'amount']
+        validators = [
+            UniqueTogetherValidator(
+                queryset=IngredientsRecipes.objects.all(),
+                fields=['ingredient', 'recipe']
+            )
+        ]
+
+    def get_id(self, obj):
+        return obj.ingredients.id
+
+    def get_name(self, obj):
+        return obj.ingredients.name
+
+    def get_measurement_unit(self, obj):
+        return obj.ingredients.measurement_unit
 
 
 class RecipesSerializer(serializers.ModelSerializer):
@@ -81,11 +77,7 @@ class RecipesSerializer(serializers.ModelSerializer):
     author = CustomUserSerializer(read_only=True)
     tags = TagsSerializer(read_only=True, many=True)
     image = Base64ImageField()
-    ingredients = IngredientsRecipesSerializer(
-        source='ingredientsrecipes',
-        many=True,
-        read_only=True
-    )
+    ingredients = serializers.SerializerMethodField()
     is_favorited = serializers.SerializerMethodField()
     is_in_shopping_cart = serializers.SerializerMethodField()
 
@@ -107,6 +99,10 @@ class RecipesSerializer(serializers.ModelSerializer):
             return False
         return user.shoppingcart.filter(recipe=obj).exists()
 
+    def get_ingredients(self, obj):
+        ingredients = IngredientsRecipes.objects.filter(recipes=obj)
+        return IngredientsRecipesSerializer(ingredients, many=True).data
+
 
 class CreateRecipesSerializer(serializers.ModelSerializer):
     """Сериализатор для создания и изменения рецептов."""
@@ -123,7 +119,7 @@ class CreateRecipesSerializer(serializers.ModelSerializer):
 
         def validate_ingredients(self, data):
             ingredients_list = []
-            ingredient = item['ingredients']['id']
+            ingredient = data['ingredients']
             if not data:
                 raise serializers.ValidationError(
                     'Укажите как минимум один ингредиент'

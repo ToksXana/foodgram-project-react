@@ -50,7 +50,7 @@ class ShowSubscribeSerializer(ModelSerializer):
 
     class Meta:
         model = Recipes
-        fileds = ['id', 'name', 'image', 'cooking_time']
+        fields = ['id', 'name', 'image', 'cooking_time']
 
 
 class SubscribeSerializer(serializers.ModelSerializer):
