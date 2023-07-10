@@ -48,9 +48,13 @@ class IngredientSerializer(serializers.ModelSerializer):
 
 class IngredientsRecipesSerializer(serializers.ModelSerializer):
     """Сериализатор для ингредиентов в рецепте."""
-    id = serializers.SerializerMethodField()
-    name = serializers.SerializerMethodField()
-    measurement_unit = serializers.SerializerMethodField()
+    id = serializers.PrimaryKeyRelatedField(read_only=True,
+                                            source='ingredients')
+    name = serializers.StringRelatedField(read_only=True, source='ingredients')
+    measurement_unit = serializers.StringRelatedField(
+        read_only=True,
+        source='ingredients.measurement_unit'
+    )
 
     class Meta:
         model = IngredientsRecipes
