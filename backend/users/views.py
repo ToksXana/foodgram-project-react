@@ -11,8 +11,11 @@ from rest_framework.response import Response
 from api.permissions import IsAuthorOrReadOnly
 
 from .models import CustomUser, Subscribe
-from .serializers import (CustomUserSerializer, PasswordSerializer,
-                          SubscribeSerializer)
+from .serializers import (
+    CustomUserSerializer,
+    PasswordSerializer,
+    SubscribeSerializer
+)
 
 
 class CustomUserViewSet(UserViewSet):

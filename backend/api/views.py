@@ -7,13 +7,23 @@ from rest_framework.decorators import action
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.response import Response
 
-from recipes.models import (Favorite, Ingredients, IngredientsRecipes, Recipes,
-                            ShoppingCart, Tags)
+from recipes.models import (
+    Favorite,
+    Ingredients,
+    IngredientsRecipes,
+    Recipes,
+    ShoppingCart,
+    Tags
+)
 
 from .permissions import IsAdminOrReadOnly, IsAuthorOrReadOnly
-from .serializers import (CreateRecipesSerializer, IngredientSerializer,
-                          RecipesSerializer, ShoppingCartSerializer,
-                          TagsSerializer)
+from .serializers import (
+    CreateRecipesSerializer,
+    IngredientSerializer,
+    RecipesSerializer,
+    ShoppingCartSerializer,
+    TagsSerializer
+)
 
 
 class IngredientViewSet(viewsets.ReadOnlyModelViewSet):
@@ -62,13 +72,11 @@ class RecipeViewSet(viewsets.ModelViewSet):
                 recipe, context={'request': request}
             )
             return Response(serializer.data, status=status.HTTP_201_CREATED)
-        if self.request.method == 'DELETE':
-            if not Favorite.objects.filter(user=user, recipe=recipe).exists():
-                raise exceptions.ValidationError('Рецепт не в избранном.')
-            favorite = get_object_or_404(Favorite, user=user, recipe=recipe)
-            favorite.delete()
-            return Response(status=status.HTTP_204_NO_CONTENT)
-        return Response(status=status.HTTP_405_METHOD_NOT_ALLOWED)
+        if not Favorite.objects.filter(user=user, recipe=recipe).exists():
+            raise exceptions.ValidationError('Рецепт не в избранном.')
+        favorite = get_object_or_404(Favorite, user=user, recipe=recipe)
+        favorite.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
     @action(detail=True, methods=['post', 'delete'], url_path='shopping_cart',
             url_name='shopping_cart')
