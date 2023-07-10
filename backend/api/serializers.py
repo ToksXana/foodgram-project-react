@@ -6,7 +6,7 @@ from rest_framework import serializers
 from rest_framework.serializers import ModelSerializer
 from rest_framework.validators import UniqueTogetherValidator
 
-from api_users.serializers import CustomUserSerializer
+from users.serializers import CustomUserSerializer
 from recipes.models import Ingredients, IngredientsRecipes, Recipes, Tags
 
 
@@ -48,9 +48,13 @@ class IngredientSerializer(serializers.ModelSerializer):
 
 class IngredientsRecipesSerializer(serializers.ModelSerializer):
     """Сериализатор для ингредиентов в рецепте."""
-    id = serializers.SerializerMethodField()
-    name = serializers.SerializerMethodField()
-    measurement_unit = serializers.SerializerMethodField()
+    id = serializers.PrimaryKeyRelatedField(read_only=True,
+                                            source='ingredients')
+    name = serializers.StringRelatedField(read_only=True, source='ingredients')
+    measurement_unit = serializers.StringRelatedField(
+        read_only=True,
+        source='ingredients.measurement_unit'
+    )
 
     class Meta:
         model = IngredientsRecipes
@@ -61,15 +65,6 @@ class IngredientsRecipesSerializer(serializers.ModelSerializer):
                 fields=['ingredient', 'recipe']
             )
         ]
-
-    def get_id(self, obj):
-        return obj.ingredients.id
-
-    def get_name(self, obj):
-        return obj.ingredients.name
-
-    def get_measurement_unit(self, obj):
-        return obj.ingredients.measurement_unit
 
 
 class RecipesSerializer(serializers.ModelSerializer):
