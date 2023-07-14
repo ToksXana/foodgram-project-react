@@ -14,8 +14,8 @@ class CustomUserSerializer(UserSerializer):
 
     class Meta:
         model = CustomUser
-        fields = ['email', 'username', 'first_name', 'last_name', 'password',
-                  'is_subscribed']
+        fields = ['id', 'email', 'username', 'first_name', 'last_name',
+                  'password', 'is_subscribed']
 
     def create(self, validated_data):
         user = CustomUser.objects.create(
@@ -32,7 +32,7 @@ class CustomUserSerializer(UserSerializer):
         user = self.context.get('request').user
         if user.is_anonymous:
             return False
-        return Subscribe.objects.filter(user=user, author=obj.id).exists()
+        return Subscribe.objects.filter(user=user, author=obj).exists()
 
 
 class PasswordSerializer(serializers.ModelSerializer):
@@ -53,14 +53,8 @@ class ShowSubscribeSerializer(ModelSerializer):
         fields = ['id', 'name', 'image', 'cooking_time']
 
 
-class SubscribeSerializer(serializers.ModelSerializer):
+class SubscribeSerializer(CustomUserSerializer):
     """Сериализатор для подписок."""
-    email = serializers.ReadOnlyField(source='author.email')
-    id = serializers.ReadOnlyField(source='author.id')
-    username = serializers.ReadOnlyField(source='author.username')
-    first_name = serializers.ReadOnlyField(source='author.first_name')
-    last_name = serializers.ReadOnlyField(source='author.last_name')
-    is_subscribed = serializers.SerializerMethodField()
     recipes = serializers.SerializerMethodField()
     recipes_count = serializers.SerializerMethodField()
 
@@ -94,9 +88,3 @@ class SubscribeSerializer(serializers.ModelSerializer):
 
     def get_recipes_count(self, obj):
         return Recipes.objects.filter(author=obj).count()
-
-    def get_is_subscribed(self, obj):
-        user = self.context.get('request').user
-        if user.is_anonymous:
-            return False
-        return Subscribe.objects.filter(user=user, author=obj).exists()

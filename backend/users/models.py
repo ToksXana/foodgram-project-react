@@ -24,7 +24,7 @@ class CustomUser(AbstractUser):
         ordering = ['-id']
 
     def __str__(self):
-        return self.username
+        return f'{self.first_name} {self.last_name}'
 
 
 class Subscribe(models.Model):
@@ -51,3 +51,6 @@ class Subscribe(models.Model):
                 fields=['user', 'author'], name='unique_subscribe'
             )
         ]
+
+    def __str__(self) -> str:
+        return f'{self.user} {self.author}'

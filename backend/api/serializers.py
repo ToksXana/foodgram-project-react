@@ -6,8 +6,8 @@ from rest_framework import serializers
 from rest_framework.serializers import ModelSerializer
 from rest_framework.validators import UniqueTogetherValidator
 
-from users.serializers import CustomUserSerializer
 from recipes.models import Ingredients, IngredientsRecipes, Recipes, Tags
+from users.serializers import CustomUserSerializer
 
 
 class Hex2NameColor(serializers.Field):
@@ -42,15 +42,15 @@ class Base64ImageField(serializers.ImageField):
 class IngredientSerializer(serializers.ModelSerializer):
     """Сериализатор для ингредиентов."""
     class Meta:
-        fields = ['name', 'measurement_unit']
+        fields = ['id', 'name', 'measurement_unit']
         model = Ingredients
 
 
 class IngredientsRecipesSerializer(serializers.ModelSerializer):
     """Сериализатор для ингредиентов в рецепте."""
-    id = serializers.PrimaryKeyRelatedField(read_only=True,
-                                            source='ingredients')
-    name = serializers.StringRelatedField(read_only=True, source='ingredients')
+    id = serializers.ReadOnlyField(source='ingredients.id')
+    name = serializers.StringRelatedField(read_only=True,
+                                          source='ingredients.name')
     measurement_unit = serializers.StringRelatedField(
         read_only=True,
         source='ingredients.measurement_unit'
@@ -62,9 +62,37 @@ class IngredientsRecipesSerializer(serializers.ModelSerializer):
         validators = [
             UniqueTogetherValidator(
                 queryset=IngredientsRecipes.objects.all(),
-                fields=['ingredient', 'recipe']
+                fields=['ingredients', 'recipe']
             )
         ]
+
+    def validate_ingredients(self, data):
+        ingredients_list = []
+        ingredient = data['ingredients']
+        if not data:
+            raise serializers.ValidationError(
+                'Укажите как минимум один ингредиент'
+            )
+        for item in data:
+            if item['amount'] == 0:
+                raise serializers.ValidationError(
+                    'Укажите колличество'
+                )
+            if ingredient in ingredients_list:
+                raise serializers.ValidationError(
+                    'Вы уже добавили этот ингредиент'
+                )
+            ingredients_list.append(ingredient)
+        return data
+
+
+class IngredientsInRecipeSerializer(IngredientsRecipesSerializer):
+    """Вспомогательный сериализатор для добавления ингредиентов"""
+    id = serializers.PrimaryKeyRelatedField(queryset=Ingredients.objects.all())
+
+    class Meta:
+        model = IngredientsRecipes
+        fields = ['id', 'name', 'measurement_unit', 'amount']
 
 
 class RecipesSerializer(serializers.ModelSerializer):
@@ -102,9 +130,10 @@ class RecipesSerializer(serializers.ModelSerializer):
 class CreateRecipesSerializer(serializers.ModelSerializer):
     """Сериализатор для создания и изменения рецептов."""
     author = CustomUserSerializer(read_only=True)
-    tags = TagsSerializer(read_only=True, many=True)
-    ingredients = IngredientsRecipesSerializer(many=True, read_only=True,
-                                               source='ingredientsrecipes')
+    tags = serializers.PrimaryKeyRelatedField(
+        queryset=Tags.objects.all(), many=True
+    )
+    ingredients = IngredientsInRecipeSerializer(many=True)
     image = Base64ImageField(required=True)
 
     class Meta:
@@ -112,70 +141,51 @@ class CreateRecipesSerializer(serializers.ModelSerializer):
         fields = ['id', 'ingredients', 'tags', 'image',
                   'name', 'text', 'cooking_time', 'author']
 
-        def validate_ingredients(self, data):
-            ingredients_list = []
-            ingredient = data['ingredients']
-            if not data:
-                raise serializers.ValidationError(
-                    'Укажите как минимум один ингредиент'
-                )
-            for item in data:
-                if item['amount'] == 0:
-                    raise serializers.ValidationError(
-                        'Укажите колличество'
-                    )
-                if ingredient in ingredients_list:
-                    raise serializers.ValidationError(
-                        'Вы уже добавили этот ингредиент'
-                    )
-                ingredients_list.append(ingredient)
-            return data
-
-        def validate_tags(self, data):
-            if not data:
-                raise serializers.ValidationError(
-                    'Укажите один или несколько тегов'
-                )
-            return data
-
-        def create(self, validated_data):
-            ingredients = validated_data.pop('ingredients')
-            tags = validated_data.pop('tags')
-            recipe = Recipes.objects.create(**validated_data)
-            for ingredient in ingredients:
-                amount = ingredient['amount']
-                current_ingredient, status = Ingredients.objects.get_or_create(
-                    **ingredient)
-                IngredientsRecipes.objects.create(
-                    ingredient=current_ingredient,
-                    recipe=recipe,
-                    amount=amount
-                )
-            for tag in tags:
-                recipe.tags.add(tag)
-            return recipe
-
-        def update(self, instance, validated_data):
-            if 'ingredients' in validated_data:
-                ingredients = validated_data.pop('ingredients')
-                instance.ingredients.clear()
-                self.create_recipe_ingredients(ingredients, instance)
-            if 'tags' in validated_data:
-                instance.tags.set(validated_data.pop('tags'))
-            instance.image = validated_data.get('image', instance.image)
-            instance.name = validated_data.get('name', instance.name)
-            instance.text = validated_data.get('text', instance.text)
-            instance.cooking_time = validated_data.get(
-                'cooking_time', instance.cooking_time
+    def validate_tags(self, data):
+        if not data:
+            raise serializers.ValidationError(
+                'Укажите один или несколько тегов'
             )
-            instance.save()
-            return instance
+        return data
 
-        def to_representation(self, recipe):
-            return RecipesSerializer(
-                recipe,
-                context={'request': self.context.get('request')}
-            ).data
+    def add_ingredients(self, ingredients, model):
+        ingredientsinrecipe_data = []
+        for ingredient in ingredients:
+            ingredientsinrecipe_data.append(IngredientsRecipes(
+                recipes=model,
+                ingredients=ingredient['id'],
+                amount=ingredient['amount']
+            ))
+        IngredientsRecipes.objects.bulk_create(ingredientsinrecipe_data)
+
+    def create(self, validated_data):
+        ingredients = validated_data.pop('ingredients')
+        tags = validated_data.pop('tags')
+        recipe = super().create(validated_data)
+        self.add_ingredients(ingredients, recipe)
+        for tag in tags:
+            recipe.tags.add(tag)
+        return recipe
+
+    def update(self, instance, validated_data):
+        ingredients = validated_data.pop('ingredients')
+        if 'tags' in validated_data:
+            instance.tags.set(validated_data.pop('tags'))
+        instance.ingredients.clear()
+        instance.image = validated_data.get('image', instance.image)
+        self.add_ingredients(ingredients, instance)
+        instance.name = validated_data.get('name', instance.name)
+        instance.text = validated_data.get('text', instance.text)
+        instance.cooking_time = validated_data.get(
+            'cooking_time', instance.cooking_time
+        )
+        return super().update(instance, validated_data)
+
+    def to_representation(self, recipe):
+        return RecipesSerializer(
+            recipe,
+            context={'request': self.context.get('request')}
+        ).data
 
 
 class ShoppingCartSerializer(ModelSerializer):
